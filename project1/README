@@ -1,0 +1,5 @@
+## Compile
+... smth with `javac` and `java`
+
+## Run
+... smth with `launcher.sh` and `cleanup.sh`

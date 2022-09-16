@@ -1,5 +1,9 @@
 ## Compile
-... smth with `javac` and `java`
+```
+javac src/* -d build
+cd build
+jar cvfe Node.jar Node *
+```
 
 ## Run
 ... smth with `launcher.sh` and `cleanup.sh`

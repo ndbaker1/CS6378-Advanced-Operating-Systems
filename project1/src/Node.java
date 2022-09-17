@@ -5,7 +5,7 @@ import java.net.ServerSocket;
 public class Node {
   private State state;
 
-  public static void main(String[] args) throws Exception {
+  public static void main(String[] args) {
     /**
       Pseudocode
 
@@ -15,14 +15,31 @@ public class Node {
       4. handle incoming messages from peers in a state-machine style
      */
 
-    // open a listening socket for the server
-    ServerSocket welcomeSocket = new ServerSocket(9999);
-    boolean done = false;
-    while (!done) {
-      // accept incoming socket connection requests
-      Socket connectionSocket = welcomeSocket.accept();
-      // spawn a new handler for the accepted
-      new ClientHandler(connectionSocket).start();
+    Config config = Config.fromFile("config.txt");
+
+    new Thread(() -> {
+      try {
+        // open a listening socket for the server
+        final ServerSocket welcomeSocket = new ServerSocket(9999);
+        while (true) {
+          // accept incoming socket connection requests
+          final Socket connectionSocket = welcomeSocket.accept();
+          // spawn a new handler for the accepted
+          new Thread(() -> { }).start();
+        }
+      } catch (Exception e) {
+        e.printStackTrace();
+      }
+    }).start();
+
+    for (NodeConfig node : config.nodeConfigs) {
+      new Thread(() -> {
+        try {
+          final Socket clientSocket = new Socket(node.getHostName(), node.getListenPort());
+        } catch (Exception e) {
+          e.printStackTrace();
+        }
+      }).start();
     }
   }
 
@@ -30,24 +47,9 @@ public class Node {
     return this.state;
   }
 
-  public void setState(State state) {
+  public void setState(final State state) {
     this.state = state;
   }
 
   private enum State { ACTIVE, PASSIVE }
-}
-
-/**
- * Thread for handling parallel client connections
- */
-class ClientHandler extends Thread {
-  private Socket clientSocket;
-
-  public ClientHandler(Socket socket) {
-    this.clientSocket = socket;
-  }
-
-  public void run() {
-
-  }
 }

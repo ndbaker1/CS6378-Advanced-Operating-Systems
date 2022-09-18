@@ -37,7 +37,7 @@ public class Node {
     return neighbors;
   }
 
-  public static void main(String[] args) {
+  public static void main(String[] args) throws Exception {
     /**
       Pseudocode
 
@@ -48,7 +48,7 @@ public class Node {
      */
 
     // find out which node this instance is labelled
-    final int id = Integer.parseInt(args[2]);
+    final int id = Integer.parseInt(args[0]);
     // read the configuration
     Config config = Config.fromFile("config.txt");
     // pull the current node's config based on id label
@@ -58,7 +58,7 @@ public class Node {
     new Thread(() -> {
       try {
         // open a listening socket for the server
-        final ServerSocket welcomeSocket = new ServerSocket(9999);
+        final ServerSocket welcomeSocket = new ServerSocket(node.getListenPort());
         while (true) {
           // accept incoming socket connection requests
           final Socket connectionSocket = welcomeSocket.accept();
@@ -74,7 +74,10 @@ public class Node {
     for (int neighborIndex : node.neighbors) {
       new Thread(() -> {
         try {
-          final Socket clientSocket = new Socket(node.getHostName(), node.getListenPort());
+          final Socket clientSocket = new Socket(
+            config.nodeConfigs[neighborIndex].getHostName(),
+            config.nodeConfigs[neighborIndex].getListenPort()
+          );
         } catch (Exception e) {
           e.printStackTrace();
         }

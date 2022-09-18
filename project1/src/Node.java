@@ -1,9 +1,41 @@
 import java.net.Socket;
 import java.net.ServerSocket;
+import java.util.List;
+import java.util.ArrayList;
 
 
 public class Node {
-  private State state;
+  private final int id;
+  private final String hostName;
+  private final int listenPort;
+  private final List<Integer> neighbors;
+
+  public Node(
+    final int id,
+    final String hostName,
+    final int listenPort
+  ) {
+    this.id = id;
+    this.hostName = hostName;
+    this.listenPort = listenPort;
+    this.neighbors = new ArrayList<Integer>();
+  }
+
+  public int getId() {
+    return id;
+  }
+
+  public String getHostName() {
+    return hostName;
+  }
+
+  public int getListenPort() {
+    return listenPort;
+  }
+
+  public List<Integer> getNeighbors() {
+    return neighbors;
+  }
 
   public static void main(String[] args) {
     /**
@@ -15,8 +47,14 @@ public class Node {
       4. handle incoming messages from peers in a state-machine style
      */
 
+    // find out which node this instance is labelled
+    final int id = Integer.parseInt(args[2]);
+    // read the configuration
     Config config = Config.fromFile("config.txt");
+    // pull the current node's config based on id label
+    final Node node = config.nodeConfigs[id];
 
+    // spawn a thread to accept connections to this node
     new Thread(() -> {
       try {
         // open a listening socket for the server
@@ -32,7 +70,8 @@ public class Node {
       }
     }).start();
 
-    for (NodeConfig node : config.nodeConfigs) {
+    // create a socket connection to each node in the neighbor set
+    for (int neighborIndex : node.neighbors) {
       new Thread(() -> {
         try {
           final Socket clientSocket = new Socket(node.getHostName(), node.getListenPort());
@@ -41,14 +80,6 @@ public class Node {
         }
       }).start();
     }
-  }
-
-  public State getState() {
-    return this.state;
-  }
-
-  public void setState(final State state) {
-    this.state = state;
   }
 
   private enum State { ACTIVE, PASSIVE }

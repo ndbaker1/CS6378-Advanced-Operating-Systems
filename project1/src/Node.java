@@ -52,7 +52,6 @@ public class Node {
 
   private void run(final Config config) throws Exception {
 
-    int queuedMessages = 0;
     final Socket[] connections = new Socket[config.nodes];
 
     // spawn a thread to accept connections to this node

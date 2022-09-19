@@ -1,34 +1,35 @@
 #!/bin/bash
 
 # Change this to your netid
-netid=sxg122830
+netid=ndb180002
 
 # Root directory of your project
-PROJDIR=/people/cs/s/sxg122830/TestProj
+PROJDIR=$(pwd)
 
 # Directory where the config file is located on your local system
-CONFIGLOCAL=$HOME/launch/config.txt
+CONFIGLOCAL=$PROJDIR/config.txt
 
 # Directory your java classes are in
-BINDIR=$PROJDIR/bin
+BINDIR=$PROJDIR/build
 
 # Your main project class
-PROG=HelloWorld
+PROG=Node
 
 n=0
 
 cat $CONFIGLOCAL | sed -e "s/#.*//" | sed -e "/^\s*$/d" |
 (
     read i
+    i=$( echo $i | awk '{ print $1 }' )
     echo $i
     while [[ $n -lt $i ]]
     do
     	read line
     	p=$( echo $line | awk '{ print $1 }' )
-        host=$( echo $line | awk '{ print $2 }' )
+      host=$( echo $line | awk '{ print $2 }' )
 
-	gnome-terminal -e "ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no $netid@$host java -cp $BINDIR $PROG $p; exec bash" &
+      ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no $netid@$host java -cp $BINDIR $PROG $CONFIGLOCAL $p &
 
-        n=$(( n + 1 ))
+      n=$(( n + 1 ))
     done
 )

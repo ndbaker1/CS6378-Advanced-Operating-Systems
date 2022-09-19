@@ -1,0 +1,11 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build",
+            "command": "javac project1/src/* -d build -Xlint:unchecked && cd build && jar cvfe Node.jar Node *",
+            "type": "shell",
+            "group": "build",
+        }
+    ]
+}

@@ -30,5 +30,3 @@ cat $CONFIGLOCAL | sed -e "s/#.*//" | sed -e "/^\s*$/d" |
    
 )
 
-
-echo "Cleanup complete"

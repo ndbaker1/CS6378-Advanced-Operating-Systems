@@ -66,6 +66,7 @@ public class Node {
           new Thread(() -> { }).start();
         }
       } catch (Exception e) {
+        err(id, "failed to start listening on " + node.getListenPort());
         e.printStackTrace();
       }
     }).start();
@@ -81,11 +82,23 @@ public class Node {
             config.nodeConfigs[neighborIndex].getHostName(),
             config.nodeConfigs[neighborIndex].getListenPort()
           );
+          log(id, "connected to " + neighborIndex);
         } catch (Exception e) {
+          err(id, "failed to connect to node " + neighborIndex +
+            " at " + config.nodeConfigs[neighborIndex].getHostName() +
+            " on port " + config.nodeConfigs[neighborIndex].getListenPort());
           e.printStackTrace();
         }
       }).start();
     }
+  }
+
+  private static void err(final int id, final String message) {
+    System.err.println("[" + id + "] " + message);
+  }
+
+  private static void log(final int id, final String message) {
+    System.out.println("[" + id + "] " + message);
   }
 
   private enum State { ACTIVE, PASSIVE }

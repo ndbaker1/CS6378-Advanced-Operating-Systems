@@ -2,8 +2,8 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "build",
-            "command": "javac project1/src/* -d build -Xlint:unchecked && cd build && jar cvfe Node.jar Node *",
+            "label": "make",
+            "command": "cd ${fileDirname}/.. && make",
             "type": "shell",
             "group": "build",
         }

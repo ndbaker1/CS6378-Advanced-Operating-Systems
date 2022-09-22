@@ -1,9 +1,9 @@
+# CS 6378 Project 1
+Members:
+    - Nicholas Baker ndb180002
+
 ## Compile
-```
-javac src/* -d build
-cd build
-jar cvfe Node.jar Node *
-```
+Run `make` in the current directory to build classes into `build`
 
 ## Run
-... smth with `launcher.sh` and `cleanup.sh`
+Run `make start` to start the program and `make stop` to ensure every processes is killed

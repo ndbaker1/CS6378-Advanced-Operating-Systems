@@ -16,9 +16,18 @@ public class Node {
   private Socket[] connections = null;
   private int queuedMessages = 0;
   private int messageLimit = 0;
+  private State state = State.PASSIVE;
   
   public List<Integer> getNeighbors() {
     return neighbors;
+  }
+
+  private State getState() {
+    return state;
+  }
+
+  private void setState(final State state) {
+    this.state = state;
   }
 
   public Node(
@@ -64,11 +73,7 @@ public class Node {
               String line;
               while ((line = reader.readLine()) != null) {
                 log("got a message");
-                if (getState() == PASSIVE) {
-                  log("becoming active");
-                  generateMessages(config.maxPerActive, config.minPerActive);
-                  activate(config.minSendDelay);
-                }
+                try_activate(config.minSendDelay, config.maxPerActive, config.minPerActive);
               }
             } catch (Exception e) {
               err("failed to spawn handler for connection");
@@ -103,14 +108,25 @@ public class Node {
     
     Thread.sleep(3000); // 3 seconds
     
+    // make node 0 the start node for at least one node at the start
     if (id == 0) {
-      generateMessages(config.maxPerActive, config.minPerActive);
-      activate(config.minSendDelay);
+      try_activate(config.minSendDelay, config.maxPerActive, config.minPerActive);
     }
   }
 
-  private synchronized void activate(final int minSendDelay) {
-    while (getState() == ACTIVE && messageLimit > 0) {
+  private void try_activate(final int minSendDelay, final int maxPerActive, final int minPerActive) {
+
+    synchronized(this) {
+      // change the state of the node from PASSIVE to ACTIVE
+      if (getState() == State.PASSIVE && messageLimit > 0) setState(State.ACTIVE);
+      else return;
+    }
+
+    log("became active");
+    // generate the normal number of messages for the activation of the node.
+    generateMessages(maxPerActive, minPerActive);
+
+    while (queuedMessages > 0 && messageLimit > 0) {
       final int node = randomNeighbor();
       try {
         log("writing a message to node " + node);
@@ -128,6 +144,8 @@ public class Node {
         e.printStackTrace();
       }
     }
+
+    setState(State.PASSIVE);
     log("became passive");
   }
 
@@ -147,15 +165,7 @@ public class Node {
     System.out.println("[" + id + "] " + message);
   }
 
-  static final int ACTIVE = 1;
-  static final int PASSIVE = 0;
-  
-  /**
-   * Returns 0 or 1 indicating if the state of the node is passive or active
-   */
-  private synchronized int getState() {
-    return queuedMessages > 0 ? ACTIVE : PASSIVE;
-  }
+  private enum State { PASSIVE, ACTIVE };
 
   private class Message {
     public Message() { }

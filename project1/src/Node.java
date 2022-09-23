@@ -17,29 +17,12 @@ public class Node {
 
   private HashMap<Integer, Socket> sockets = new HashMap<Integer, Socket>();
   private HashMap<Integer, ObjectOutputStream> outputStreams = new HashMap<Integer, ObjectOutputStream>();
-  private Socket[] connections = null;
+
   private int queuedMessages = 0;
   private int messageLimit = 0;
   private State state = State.PASSIVE;
   
-  private static Config config = null;
-
-  public List<Integer> getNeighbors() {
-    return neighbors;
-  }
-
-  private State getState() {
-    return state;
-  }
-
-  private void setState(final State state) {
-    if (state == State.ACTIVE) {
-      log("becoming active");
-    } else {
-      log("becoming passive");
-    } 
-    this.state = state;
-  }
+  private static Config config;
 
   public Node(
     final int id,
@@ -82,7 +65,7 @@ public class Node {
               try {
                 // when a message is recieved, buffer it and mark the node as active 
                 final Message message = (Message) inputStream.readObject();
-                log("got a message");
+                log("recieved a message");
 
                 if (message instanceof Message.Application) {
                   try_activate();
@@ -201,6 +184,22 @@ public class Node {
     return new Random().nextInt(max - min + 1) + min;
   }
 
+  public List<Integer> getNeighbors() {
+    return neighbors;
+  }
+
+  private State getState() {
+    return state;
+  }
+
+  private void setState(final State state) {
+    if (state == State.ACTIVE) {
+      log("becoming active");
+    } else {
+      log("becoming passive");
+    } 
+    this.state = state;
+  }
   private void err(final String message) {
     System.err.println("[" + id + "] " + message);
   }

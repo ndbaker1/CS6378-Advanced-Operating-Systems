@@ -70,10 +70,10 @@ public class Node {
         while (true) {
           // accept incoming socket connection requests
           final Socket connectionSocket = welcomeSocket.accept();
+          final BufferedReader reader = new BufferedReader(new InputStreamReader(connectionSocket.getInputStream()));
           // spawn a new handler for the accepted
           new Thread(() -> {
             try {
-              final BufferedReader reader = new BufferedReader(new InputStreamReader(connectionSocket.getInputStream()));
               // when a message is recieved, buffer it and mark the node as active 
               String line;
               while ((line = reader.readLine()) != null) {
@@ -92,7 +92,7 @@ public class Node {
       }
     }).start();
 
-    // sleep after creation Server Socket to allow other clients to setup
+    log("sleeping for [3] seconds to allow peer server sockets to setup...");
     Thread.sleep(3000); // 3 seconds
 
     // create a socket connection to each node in the neighbor set
@@ -111,6 +111,7 @@ public class Node {
       }
     }
     
+    log("sleeping for [3] seconds to allow peer client sockets to setup...");
     Thread.sleep(3000); // 3 seconds
     
     // make node 0 the start node for at least one node at the start

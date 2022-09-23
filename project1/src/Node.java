@@ -27,6 +27,11 @@ public class Node {
   }
 
   private void setState(final State state) {
+    if (state == State.ACTIVE) {
+      log("becoming active");
+    } else {
+      log("becoming passive");
+    } 
     this.state = state;
   }
 
@@ -117,15 +122,18 @@ public class Node {
   private void try_activate(final int minSendDelay, final int maxPerActive, final int minPerActive) {
 
     synchronized(this) {
-      // change the state of the node from PASSIVE to ACTIVE
+      // change the state of the node from PASSIVE to ACTIVE if there are still
+      // messages that it can send
       if (getState() == State.PASSIVE && messageLimit > 0) setState(State.ACTIVE);
       else return;
     }
 
-    log("became active");
     // generate the normal number of messages for the activation of the node.
     generateMessages(maxPerActive, minPerActive);
 
+    // based on the gateway in the synchronized block above, there should not be
+    // any other thread executing this loop, so there is no synchronization
+    // required.
     while (queuedMessages > 0 && messageLimit > 0) {
       final int node = randomNeighbor();
       try {
@@ -145,12 +153,12 @@ public class Node {
       }
     }
 
+    // return the node to the PASSIVE state
     setState(State.PASSIVE);
-    log("became passive");
   }
 
   private int randomNeighbor() {
-    return neighbors.get((int) (Math.random() * (neighbors.size() - 1)));
+    return neighbors.get((int) (Math.random() * neighbors.size()));
   }
 
   private void generateMessages(final int max, final int min) {

@@ -2,9 +2,11 @@ import java.net.Socket;
 import java.net.ServerSocket;
 import java.util.List;
 import java.util.ArrayList;
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
+import java.util.HashMap;
+import java.util.Random;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.EOFException;
 
 
 public class Node {
@@ -13,11 +15,15 @@ public class Node {
   private final int listenPort;
   private final List<Integer> neighbors;
 
+  private HashMap<Integer, Socket> sockets = new HashMap<Integer, Socket>();
+  private HashMap<Integer, ObjectOutputStream> outputStreams = new HashMap<Integer, ObjectOutputStream>();
   private Socket[] connections = null;
   private int queuedMessages = 0;
   private int messageLimit = 0;
   private State state = State.PASSIVE;
   
+  private static Config config = null;
+
   public List<Integer> getNeighbors() {
     return neighbors;
   }
@@ -51,15 +57,14 @@ public class Node {
     final int id = Integer.parseInt(args[1]);
     // read the configuration
     final Config config = Config.fromFile(args[0]);
+    Node.config = config;
     // pull the current node's config based on id label
     final Node node = config.nodeConfigs[id];
     // run the node with knowledge from the configuration file
-    node.run(config);
+    node.run();
   }
 
-  private void run(final Config config) throws Exception {
-    // not every index here will be filled, this could be replaced with a hashmap or etc.
-    connections = new Socket[config.nodes];
+  private void run() throws Exception {
     messageLimit = config.maxNumber;
 
     // spawn a thread to accept connections to this node
@@ -70,19 +75,25 @@ public class Node {
         while (true) {
           // accept incoming socket connection requests
           final Socket connectionSocket = welcomeSocket.accept();
-          final BufferedReader reader = new BufferedReader(new InputStreamReader(connectionSocket.getInputStream()));
+          final ObjectInputStream inputStream = new ObjectInputStream(connectionSocket.getInputStream());
           // spawn a new handler for the accepted
           new Thread(() -> {
-            try {
-              // when a message is recieved, buffer it and mark the node as active 
-              String line;
-              while ((line = reader.readLine()) != null) {
+            while (true) {
+              try {
+                // when a message is recieved, buffer it and mark the node as active 
+                final Message message = (Message) inputStream.readObject();
                 log("got a message");
-                try_activate(config.minSendDelay, config.maxPerActive, config.minPerActive);
+
+                if (message instanceof Message.Application) {
+                  try_activate();
+                } else if (message instanceof Message.Control) {
+
+                }
+              } catch (EOFException e) {
+                break;
+              } catch (Exception e) {
+                e.printStackTrace();
               }
-            } catch (Exception e) {
-              err("failed to spawn handler for connection");
-              e.printStackTrace();
             }
           }).start();
         }
@@ -98,11 +109,15 @@ public class Node {
     // create a socket connection to each node in the neighbor set
     for (int neighborIndex : neighbors) {
       try {
-        connections[neighborIndex] = new Socket(
+        final Socket socket = new Socket(
           config.nodeConfigs[neighborIndex].hostName,
           config.nodeConfigs[neighborIndex].listenPort
         );
+
         log("connected to " + neighborIndex);
+
+        sockets.put(neighborIndex, socket);
+        outputStreams.put(neighborIndex, new ObjectOutputStream(socket.getOutputStream()));
       } catch (Exception e) {
         err("failed to connect to node " + neighborIndex +
           " at " + config.nodeConfigs[neighborIndex].hostName +
@@ -116,11 +131,12 @@ public class Node {
     
     // make node 0 the start node for at least one node at the start
     if (id == 0) {
-      try_activate(config.minSendDelay, config.maxPerActive, config.minPerActive);
+      runSnapshotTimer();
+      try_activate();
     }
   }
 
-  private void try_activate(final int minSendDelay, final int maxPerActive, final int minPerActive) {
+  private void try_activate() {
 
     synchronized(this) {
       // change the state of the node from PASSIVE to ACTIVE if there are still
@@ -130,7 +146,7 @@ public class Node {
     }
 
     // generate the normal number of messages for the activation of the node.
-    generateMessages(maxPerActive, minPerActive);
+    queuedMessages += generateMessages(config.maxPerActive, config.minPerActive);
 
     // based on the gateway in the synchronized block above, there should not be
     // any other thread executing this loop, so there is no synchronization
@@ -138,32 +154,51 @@ public class Node {
     while (queuedMessages > 0 && messageLimit > 0) {
       final int node = randomNeighbor();
       try {
-        log("writing a message to node " + node);
-        final OutputStream ostream = connections[node].getOutputStream();
-        ostream.write("test\n".getBytes());
+        log("writing an application message to node " + node);
+        final ObjectOutputStream ostream = outputStreams.get(node);
+        ostream.writeObject(new Message.Application());
         ostream.flush();
 
         // decriment the message counters
         queuedMessages -= 1;
         messageLimit -= 1;
         // delay the next trasmission
-        Thread.sleep(minSendDelay);
+        Thread.sleep(config.minSendDelay);
       } catch (Exception e) {
         err("failed to send message to node " + node);
         e.printStackTrace();
       }
     }
 
+    if (messageLimit == 0) {
+      log("sent max number of messages.");
+    }
+
     // return the node to the PASSIVE state
     setState(State.PASSIVE);
   }
 
-  private int randomNeighbor() {
-    return neighbors.get((int) (Math.random() * neighbors.size()));
+  private void runSnapshotTimer() {
+    new Thread(() -> {
+      try {
+        Thread.sleep(config.snapshotDelay);
+        takeSnapshot();
+      } catch (Exception e) {
+        e.printStackTrace();
+      }
+    }).start();
   }
 
-  private void generateMessages(final int max, final int min) {
-    queuedMessages += (int) (Math.random() * (max - min)) + min;
+  private void takeSnapshot() {
+
+  }
+
+  private int randomNeighbor() {
+    return neighbors.get(new Random().nextInt(neighbors.size()));
+  }
+
+  private int generateMessages(final int max, final int min) {
+    return new Random().nextInt(max - min + 1) + min;
   }
 
   private void err(final String message) {
@@ -172,11 +207,5 @@ public class Node {
 
   private void log(final String message) {
     System.out.println("[" + id + "] " + message);
-  }
-
-  private enum State { PASSIVE, ACTIVE };
-
-  private class Message {
-    public Message() { }
   }
 }

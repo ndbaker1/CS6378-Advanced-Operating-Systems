@@ -6,6 +6,6 @@ public class ChannelState {
     public ChannelState(final int source, final int destination, final int[] clock) {
         this.source = source;
         this.destination = destination;
-        this.clock = clock;
+        this.clock = clock.clone();
     }
 }

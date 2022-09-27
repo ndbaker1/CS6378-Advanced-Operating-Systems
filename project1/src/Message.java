@@ -13,34 +13,46 @@ public class Message implements Serializable {
     return source;
   }
 
-  static class Finish extends Message {
-    public Finish(final int source) {
+  static class Application extends Message {
+    private int[] vectorClock;
+    
+    public Application(final int source, final int[] vectorClock) {
+      super(source);
+      this.vectorClock = vectorClock.clone();
+    }
+
+    public int[] getVectorClock() {
+      return vectorClock;
+    }
+  }
+
+  static class Marker extends Message {
+    public Marker(final int source) {
       super(source);
     }
   }
 
-  static class Snapshot extends Message {
-    LocalState localState;
-    List<ChannelState> channelStates;
+ static class Snapshot extends Message {
+    private LocalState localState;
+    private List<ChannelState> channelStates;
 
     public Snapshot(final int source, final LocalState localState, final List<ChannelState> channelStates) {
       super(source);
       this.localState = localState;
       this.channelStates = channelStates;
     }
-  }
 
-  static class Application extends Message {
-    int[] vectorClock;
-    
-    public Application(final int source, final int[] vectorClock) {
-      super(source);
-      this.vectorClock = vectorClock.clone();
+    public LocalState getLocalState() {
+      return localState;
+    }
+
+    public List<ChannelState> getChannelStates() {
+      return channelStates;
     }
   }
 
-  static class Marker extends Message {
-    public Marker(final int source) {
+  static class Finish extends Message {
+    public Finish(final int source) {
       super(source);
     }
   }

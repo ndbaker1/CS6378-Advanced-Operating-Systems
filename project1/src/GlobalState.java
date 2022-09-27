@@ -5,8 +5,21 @@ import java.util.ArrayList;
 
 
 public class GlobalState {
-    List<LocalState> localStates = new ArrayList<LocalState>();
-    List<ChannelState> channelStates = new ArrayList<ChannelState>();
+    private List<LocalState> localStates = new ArrayList<LocalState>();
+    private List<ChannelState> channelStates = new ArrayList<ChannelState>();
 
     public GlobalState() { }
+
+    public List<LocalState> getLocalStates() {
+        return localStates;
+    }
+
+    public List<ChannelState> getChannelStates() {
+        return channelStates;
+    }
+
+    public void reset() {
+        localStates.clear();
+        channelStates.clear();
+    }
 }

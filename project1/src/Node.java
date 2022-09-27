@@ -14,6 +14,8 @@ import java.io.EOFException;
 
 public class Node {
   private static final int START_NODE = 0;
+
+  // fields used only in config Parser
   private final int id;
   private final String hostName;
   private final int listenPort;
@@ -28,16 +30,16 @@ public class Node {
   private Color markerMode = Color.Blue;
   private Set<Integer> markerLog = new HashSet<>();
 
-  // resolves to the parent of the node for snapshot messages
-  private int forwarder = -1;
-
-  private GlobalState globalState = new GlobalState();
 
   private List<ChannelState> channelStates = new ArrayList<>();
   private LocalState localState;
+  private GlobalState globalState;
 
   private int[] vectorClock;
   private static Config config;
+
+  // resolves to the parent of the node for snapshot messages
+  private int forwarder = -1;
 
 
   public Node(
@@ -55,10 +57,9 @@ public class Node {
     // find out which node this instance is labelled
     final int id = Integer.parseInt(args[1]);
     // read the configuration
-    final Config config = Config.fromFile(args[0]);
-    Node.config = config;
+    Node.config = Config.fromFile(args[0]);
     // pull the current node's config based on id label
-    final Node node = config.nodeConfigs[id];
+    final Node node = Node.config.nodeConfigs[id];
     // run the node with knowledge from the configuration file
     node.run();
   }
@@ -80,9 +81,7 @@ public class Node {
           new Thread(() -> {
             while (true) {
               try {
-                // when a message is recieved, buffer it and mark the node as active 
                 final Message message = (Message) inputStream.readObject();
-
                 if (message instanceof Message.Application) {
                   log("recieved an application message.");
                   handleApplicationMessage((Message.Application) message);
@@ -95,7 +94,7 @@ public class Node {
                   handleSnapshotMessage((Message.Snapshot) message);
                 }
               } catch (EOFException e) {
-                break;
+                break; // this is fine to ignore
               } catch (Exception e) {
                 e.printStackTrace();
               }
@@ -134,8 +133,8 @@ public class Node {
     log("sleeping for [3] seconds to allow peer client sockets to setup...");
     Thread.sleep(3000); // 3 seconds
     
-    // make node 0 the start node for at least one node at the start
     if (id == Node.START_NODE) {
+      globalState = new GlobalState();
       runSnapshotTimer();
       tryActivate();
     }
@@ -148,61 +147,63 @@ public class Node {
       setState(State.ACTIVE);
 
       new Thread(() -> {
-         // generate the normal number of messages for the activation of the node.
-         queuedMessages += generateMessages(config.maxPerActive, config.minPerActive);
+        // generate the normal number of messages for the activation of the node.
+        queuedMessages += generateMessages(config.maxPerActive, config.minPerActive);
 
-         // based on the gateway in the synchronized block above, there should not be
-         // any other thread executing this loop, so there is no synchronization
-         // required.
-         while (queuedMessages > 0 && messageLimit > 0) {
-           final int node = randomNeighbor();
-           try {
+        // based on the gateway in the synchronized block above, there should not be
+        // any other thread executing this loop, so there is no synchronization
+        // required.
+        while (queuedMessages > 0 && messageLimit > 0) {
+          final int node = randomNeighbor();
+          try {
             log("writing an application message to node " + node);
-              // send Application message to destination node socket
-              send(node, new Message.Application(id, vectorClock));
-              // decriment the message counters
-              queuedMessages--;
-              messageLimit--;
-              // delay the next trasmission
-              Thread.sleep(config.minSendDelay);
-            } catch (Exception e) {
-              err("failed to send message to node " + node);
-              e.printStackTrace();
-            }
+            // send Application message to destination node socket
+            send(node, new Message.Application(id, vectorClock));
+            // decriment the message counters
+            queuedMessages--;
+            messageLimit--;
+            // delay the next trasmission
+            Thread.sleep(config.minSendDelay);
+          } catch (Exception e) {
+            err("failed to send message to node " + node);
+            e.printStackTrace();
           }
+        }
 
-          if (messageLimit == 0) {
-            log("sent max number of messages.");
-          }
+        if (messageLimit == 0) {
+          log("sent max number of messages.");
+        }
 
-          // return the node to the PASSIVE state
-          setState(State.PASSIVE);
-        }).start();
-      }
+        // return the node to the PASSIVE state to allow entry into tryActivate again
+        setState(State.PASSIVE);
+      }).start();
+    }
   }
 
+  /**
+   * Handle recieving and/or forwarding snapshot messages to the snapshot initiator
+   */
   private void handleSnapshotMessage(final Message.Snapshot snapshotMessage) {
-    // only record messages 
+    // only record messages
     // different behavior based on whether the node initiated the snapshot or not
     if (id == Node.START_NODE) {
       log("recieved snapshot for " + snapshotMessage.getSource());
       // add nodes' state to global state and then print snapshot
-      globalState.localStates.add(snapshotMessage.localState);
-      globalState.channelStates.addAll(snapshotMessage.channelStates);
+      globalState.getLocalStates().add(snapshotMessage.getLocalState());
+      globalState.getChannelStates().addAll(snapshotMessage.getChannelStates());
 
-      if (globalState.localStates.size() == config.nodes - 1) {
+      if (globalState.getLocalStates().size() == config.nodes - 1) {
         // add nodes' state to global state and then print snapshot
-        globalState.localStates.add(localState);
-        globalState.channelStates.addAll(channelStates);
+        globalState.getLocalStates().add(localState);
+        globalState.getChannelStates().addAll(channelStates);
         outputSnapshot();
       }
     } else {
-      // send snapshot to parent since we have recorded all of the parents 
-      log("forwarding snapshot message from " + snapshotMessage.getSource() + " to " + forwarder);
       // Note:
       // Only nodes besides the START_NODE should have an forwarder,
       // since it is assigned from the marker message source id while the 
-      // initiator node triggers itself.
+      // initiator node triggers itself
+      log("forwarding snapshot message from " + snapshotMessage.getSource() + " to " + forwarder);
       send(forwarder, snapshotMessage);
     }
   }
@@ -212,8 +213,9 @@ public class Node {
    */
   private synchronized void handleApplicationMessage(final Message.Application applicationMessage) {
     for (int i = 0; i < vectorClock.length; i++) {
-      vectorClock[i] = Math.max(vectorClock[i], applicationMessage.vectorClock[i]);
+      vectorClock[i] = Math.max(vectorClock[i], applicationMessage.getVectorClock()[i]);
     }
+    // increment clock of current process
     vectorClock[id]++;
 
     // only record channel updates when the node is in RED markerMode,
@@ -221,7 +223,7 @@ public class Node {
     // This is what is making use of FIFO ordering to get all of the events which
     // were in transmission since before the marker had been received.
     if (markerMode.equals(Color.Red) && !markerLog.contains(applicationMessage.getSource())) {
-      channelStates.add(new ChannelState(applicationMessage.getSource(), id, applicationMessage.vectorClock));
+      channelStates.add(new ChannelState(applicationMessage.getSource(), id, applicationMessage.getVectorClock()));
     }
   }
 
@@ -235,6 +237,7 @@ public class Node {
       changeMode();
     }
 
+    // mark the channel as recorded
     markerLog.add(incomingMarker.getSource());
     
     // send snapshot to parent and return to blue if the markers were all replied
@@ -242,18 +245,17 @@ public class Node {
       // relax the node back to Blue to allow for more snapshots
       markerMode = Color.Blue;
 
-      // different behavior based on whether the node initiated the snapshot or not
+      // send snapshot to parent since we have recorded all of the
+      // connected neighbors if the node is not the snapshot initiator
       if (id != Node.START_NODE) {
-        // send snapshot to parent since we have recorded all of the parents 
-
         // Note:
         // Only nodes besides the START_NODE should have an forwarder,
         // since it is assigned from the marker message source id while the 
         // initiator node triggers itself.
+        log("sending snapshot to " + forwarder);
         send(forwarder, new Message.Snapshot(id, localState, channelStates));
-        localState = null;
-        channelStates.clear();
-        markerLog.clear();
+        // once the snapshot is passed on we can reset the protocol
+        resetSnapshotProtocol();
       }
     }
   }
@@ -276,11 +278,9 @@ public class Node {
   private void runSnapshotTimer() {
     new Thread(() -> {
       try {
-        while(true) {
         Thread.sleep(config.snapshotDelay);
         log("initiating snapshot!");
         changeMode();
-        }
       } catch (Exception e) {
         e.printStackTrace();
       }
@@ -314,18 +314,20 @@ public class Node {
 
   private void outputSnapshot() {
     log("snapshot!");
-
-    
-    globalState.localStates.clear();
-    globalState.channelStates.clear();
-
-    localState = null;
-    channelStates.clear();
-    markerLog.clear();
+    resetSnapshotProtocol();
+    runSnapshotTimer();
   }
 
   private boolean isSnapshotValid() {
     return true;
+  }
+
+  private void resetSnapshotProtocol() {
+    if (globalState != null) globalState.reset();
+    
+    localState = null;
+    channelStates.clear();
+    markerLog.clear();
   }
 
   /**

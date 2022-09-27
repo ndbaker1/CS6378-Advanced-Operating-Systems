@@ -144,6 +144,8 @@ public class Node {
     // change the state of the node from PASSIVE to ACTIVE if there are still
     // messages that it can send
     if (getState().equals(State.PASSIVE) && messageLimit > 0) {
+
+      log("becoming active");
       setState(State.ACTIVE);
 
       new Thread(() -> {
@@ -175,6 +177,7 @@ public class Node {
         }
 
         // return the node to the PASSIVE state to allow entry into tryActivate again
+        log("becoming passive");
         setState(State.PASSIVE);
       }).start();
     }
@@ -304,11 +307,6 @@ public class Node {
   }
 
   private void setState(final State state) {
-    if (state.equals(State.ACTIVE)) {
-      log("becoming active");
-    } else {
-      log("becoming passive");
-    } 
     this.state = state;
   }
 

@@ -314,7 +314,7 @@ public class Node {
 
   private void outputSnapshot() {
     log("snapshot!");
-    
+
     
     globalState.localStates.clear();
     globalState.channelStates.clear();
@@ -325,7 +325,7 @@ public class Node {
   }
 
   private boolean isSnapshotValid() {
-
+    return true;
   }
 
   /**

@@ -146,10 +146,9 @@ public class Node {
   }
 
   private synchronized void tryActivate() {
-    // change the state of the node from PASSIVE to ACTIVE if there are still
-    // messages that it can send
+    // change the state of the node from PASSIVE to ACTIVE
+    // if there are still messages that it can send
     if (getState().equals(State.PASSIVE) && messageLimit > 0) {
-
       log("becoming active");
       setState(State.ACTIVE);
 
@@ -163,12 +162,16 @@ public class Node {
         while (queuedMessages > 0 && messageLimit > 0) {
           final int node = randomNeighbor();
           try {
-            log("writing an application message to node " + node);
-            // send Application message to destination node socket
-            send(node, new Message.Application(id, vectorClock));
-            // decriment the message counters
-            queuedMessages--;
-            messageLimit--;
+            // dont let anyone change the vector clock being sent here
+            synchronized(this) {
+              log("writing an application message to node " + node);
+              vectorClock[id]++;
+              // send Application message to destination node socket
+              send(node, new Message.Application(id, vectorClock));
+              // decriment the message counters
+              queuedMessages--;
+              messageLimit--;
+            }
             // delay the next trasmission
             Thread.sleep(config.minSendDelay);
           } catch (Exception e) {
@@ -271,7 +274,7 @@ public class Node {
   /**
    * Process transition from Blue to Red Chandy-Lamport state
    */
-  private void changeMode() {
+  private synchronized void changeMode() {
     // switch the markerMode for Blue to Red
     markerMode = Color.Red;
     // record the node's local state
@@ -323,6 +326,12 @@ public class Node {
       log("consistent snapshot!");
     }
 
+    if (isTerminationDetected()) {
+      log("TERMINATION!");
+    } else {
+      log("CONTINUING!");
+    }
+
     writeSnapshots();
     resetSnapshotProtocol();
     runSnapshotTimer();
@@ -339,7 +348,7 @@ public class Node {
         // We can short circuit the statement if we see any
         // pair which contains a happens-before relation.
         // 
-        // e -> f === (e != f) ∧ (V(e)[P_i] < V(f)[P_i])
+        // e -> f === (i != j) ∧ (V(e)[i] <= V(f)[i])
         if (e.getID() != f.getID()) {
           if (e.getApplicationClock()[e.getID()] <= f.getApplicationClock()[e.getID()]) {
             return false;
@@ -350,6 +359,27 @@ public class Node {
     return true;
   }
 
+  /**\
+   * Detect termination by verifying that all
+   * nodes are passive and channels are empty
+   */
+  private boolean isTerminationDetected() {
+    if (!globalState.getChannelStates().isEmpty()) {
+      return false;
+    }
+
+    for (final LocalState local : globalState.getLocalStates()) {
+      if (local.getState().equals(State.ACTIVE)) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  /**
+   * Reset variables involved in snapshot protocol
+   */
   private void resetSnapshotProtocol() {
     if (globalState != null) globalState.reset();
     
@@ -405,5 +435,6 @@ public class Node {
     System.out.println("[" + id + "] " + message);
   }
 
+  public enum State { PASSIVE, ACTIVE }
   private enum Color { Blue, Red }
 }

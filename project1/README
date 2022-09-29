@@ -2,6 +2,12 @@
 Members:
     - Nicholas Baker ndb180002
 
+Contains Implementation for PART 1,2,3,4:
+- Chandy-Lamport Snapshot Protocol
+- Fidge-Mattern Vector Clock
+- Consistent Global State Validation
+- Termination Detection and Program Exit
+
 ## Compile
 Run `make` in the current directory to build classes into `build`
 

@@ -2,7 +2,7 @@ import java.io.Serializable;
 import java.util.List;
 
 
-public class Message implements Serializable {
+public abstract class Message implements Serializable {
   private int source;
 
   private Message(final int source) {
@@ -51,8 +51,8 @@ public class Message implements Serializable {
     }
   }
 
-  static class Finish extends Message {
-    public Finish(final int source) {
+  static class Halt extends Message {
+    public Halt(final int source) {
       super(source);
     }
   }

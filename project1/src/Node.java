@@ -88,15 +88,18 @@ public class Node {
               try {
                 final Message message = (Message) inputStream.readObject();
                 if (message instanceof Message.Application) {
-                  log("recieved an application message.");
+                  log("received an application message.");
                   handleApplicationMessage((Message.Application) message);
                   tryActivate();
                 } else if (message instanceof Message.Marker) {
-                  log("recieved a marker message.");
+                  log("received a marker message.");
                   handleMarkerMessage((Message.Marker) message);
                 } else if (message instanceof Message.Snapshot) {
-                  log("recieved a snapshot message.");
+                  log("received a snapshot message.");
                   handleSnapshotMessage((Message.Snapshot) message);
+                } else if (message instanceof Message.Halt) {
+                  log("received a halt message.");
+                  handleHaltMessage();
                 }
               } catch (EOFException e) {
                 break; // this is fine to ignore
@@ -163,11 +166,11 @@ public class Node {
           final int node = randomNeighbor();
           try {
             // dont let anyone change the vector clock being sent here
-            synchronized(this) {
+            synchronized(vectorClock) {
               log("writing an application message to node " + node);
-              vectorClock[id]++;
               // send Application message to destination node socket
-              send(node, new Message.Application(id, vectorClock));
+              vectorClock[id]++;
+              sendMessage(node, new Message.Application(id, vectorClock));
               // decriment the message counters
               queuedMessages--;
               messageLimit--;
@@ -179,30 +182,42 @@ public class Node {
             e.printStackTrace();
           }
         }
-
-        if (messageLimit == 0) {
-          log("sent max number of messages.");
-        }
-
         // return the node to the PASSIVE state to allow entry into tryActivate again
         log("becoming passive");
-        setState(State.PASSIVE);
+        synchronized(state) {
+          setState(State.PASSIVE);
+        }
       }).start();
     }
+  }
+
+  /**
+   * Handle recieving and/or forwarding halt messages indicating completion
+   */
+  private void handleHaltMessage() {
+    // send the halt message to every neighbor
+    for (int neighborIndex : neighbors) {
+      try {
+        sendMessage(neighborIndex, new Message.Halt(id));
+      } catch (Exception e) { /* ignore errors reaching already dead clients */ }
+    }
+
+    log("finished.. closing.");
+    System.exit(0);
   }
 
   /**
    * Handle recieving and/or forwarding snapshot messages to the snapshot initiator
    */
   private void handleSnapshotMessage(final Message.Snapshot snapshotMessage) {
-    // only record messages
-    // different behavior based on whether the node initiated the snapshot or not
+    // different behavior based on whether the node initiated the snapshot
     if (id == Node.START_NODE) {
-      log("recieved snapshot for " + snapshotMessage.getSource());
+      log("received snapshot for " + snapshotMessage.getSource());
       // add nodes' state to global state and then print snapshot
       globalState.getLocalStates().add(snapshotMessage.getLocalState());
       globalState.getChannelStates().addAll(snapshotMessage.getChannelStates());
-
+      // once the size reaches node count excluding the initator,
+      // add the initiator's state and output the snapshot
       if (globalState.getLocalStates().size() == config.nodes - 1) {
         // add nodes' state to global state and then print snapshot
         globalState.getLocalStates().add(localState);
@@ -215,7 +230,7 @@ public class Node {
       // since it is assigned from the marker message source id while the 
       // initiator node triggers itself
       log("forwarding snapshot message from " + snapshotMessage.getSource() + " to " + forwarder);
-      send(forwarder, snapshotMessage);
+      sendMessage(forwarder, snapshotMessage);
     }
   }
 
@@ -223,12 +238,12 @@ public class Node {
    * Handle application messages through vector clock Fidge-Mattern protocol
    */
   private synchronized void handleApplicationMessage(final Message.Application applicationMessage) {
+    // take the max over each component
     for (int i = 0; i < vectorClock.length; i++) {
       vectorClock[i] = Math.max(vectorClock[i], applicationMessage.getVectorClock()[i]);
     }
     // increment clock of current process
     vectorClock[id]++;
-
     // only record channel updates when the node is in RED markerMode,
     // and when the marker response hasnt been seen from the node yet.
     // This is what is making use of FIFO ordering to get all of the events which
@@ -242,20 +257,19 @@ public class Node {
    * Handle marker messages that are being seen or sent as decribed by the Chandy-Lamport Protocol.
    */
   private synchronized void handleMarkerMessage(final Message.Marker incomingMarker) {
+    // If this is the first message seen, then handle color change
     if (markerMode.equals(Color.Blue)) {
+      // remember who send the initial message
       forwarder = incomingMarker.getSource();
       // handle color change and broadcast
       changeMode();
     }
-
     // mark the channel as recorded
     markerLog.add(incomingMarker.getSource());
-    
     // send snapshot to parent and return to blue if the markers were all replied
     if (markerLog.containsAll(neighbors)) {
       // relax the node back to Blue to allow for more snapshots
       markerMode = Color.Blue;
-
       // send snapshot to parent since we have recorded all of the
       // connected neighbors if the node is not the snapshot initiator
       if (id != Node.START_NODE) {
@@ -264,7 +278,7 @@ public class Node {
         // since it is assigned from the marker message source id while the 
         // initiator node triggers itself.
         log("sending snapshot to " + forwarder);
-        send(forwarder, new Message.Snapshot(id, localState, channelStates));
+        sendMessage(forwarder, new Message.Snapshot(id, localState, channelStates));
         // once the snapshot is passed on we can reset the protocol
         resetSnapshotProtocol();
       }
@@ -277,12 +291,14 @@ public class Node {
   private synchronized void changeMode() {
     // switch the markerMode for Blue to Red
     markerMode = Color.Red;
+    // increment clock of current process
+    vectorClock[id]++;
     // record the node's local state
     localState = new LocalState(id, vectorClock, state);
     // send out the new marker messages to all outgoing channels
     final Message markerMessage = new Message.Marker(id);
     for (int neighborIndex : neighbors) {
-      send(neighborIndex, markerMessage);
+      sendMessage(neighborIndex, markerMessage);
     }
   }
 
@@ -321,20 +337,21 @@ public class Node {
   private void outputSnapshot() {
     log("snapshot taken!");
     if (!isSnapshotConsistent()) {
-      err("snapshot inconsistent!");
+      err("FAILED CHECK... snapshot inconsistent!");
     } else {
       log("consistent snapshot!");
     }
 
+    writeSnapshots();
+
     if (isTerminationDetected()) {
       log("TERMINATION!");
+      handleHaltMessage();
     } else {
       log("CONTINUING!");
+      resetSnapshotProtocol();
+      runSnapshotTimer();
     }
-
-    writeSnapshots();
-    resetSnapshotProtocol();
-    runSnapshotTimer();
   }
 
   /**
@@ -348,9 +365,10 @@ public class Node {
         // We can short circuit the statement if we see any
         // pair which contains a happens-before relation.
         // 
-        // e -> f === (i != j) ∧ (V(e)[i] <= V(f)[i])
+        // e -> f === (P(e) != P(f)) ∧ (V(e)[P(e)] <= V(f)[P(e)])
         if (e.getID() != f.getID()) {
           if (e.getApplicationClock()[e.getID()] <= f.getApplicationClock()[e.getID()]) {
+            log("fail with " + e.getID() + " -> " + f.getID());
             return false;
           }
         }
@@ -359,7 +377,7 @@ public class Node {
     return true;
   }
 
-  /**\
+  /**
    * Detect termination by verifying that all
    * nodes are passive and channels are empty
    */
@@ -382,7 +400,6 @@ public class Node {
    */
   private void resetSnapshotProtocol() {
     if (globalState != null) globalState.reset();
-    
     localState = null;
     channelStates.clear();
     markerLog.clear();
@@ -395,7 +412,7 @@ public class Node {
    *  important synchronized resource, only one thread
    *  should be using the output stream at once
    */
-  private synchronized void send(final int targetNode, final Message message) {
+  private synchronized void sendMessage(final int targetNode, final Message message) {
     try {
       final ObjectOutputStream ostream = outputStreams.get(targetNode);
       ostream.writeObject(message);
@@ -405,6 +422,9 @@ public class Node {
     }
   }
 
+  /**
+   * Write the vector clocks from the timestamp into their according output files
+   */
   private void writeSnapshots() {
     try {
       final File configFile = new File(Node.configPath);

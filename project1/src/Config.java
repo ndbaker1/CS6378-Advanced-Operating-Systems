@@ -30,8 +30,8 @@ public class Config {
     this.nodeConfigs = nodeConfigs;
   }
 
-  public static Config fromFile(String configFilepath) throws Exception {
-    final Scanner configReader = new Scanner(new File(configFilepath));
+  public static Config fromFile(final File configFile) throws Exception {
+    final Scanner configReader = new Scanner(configFile);
 
     clearEmptyLines(configReader);
 

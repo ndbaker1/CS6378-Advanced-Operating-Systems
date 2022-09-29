@@ -9,6 +9,9 @@ import java.util.Map;
 import java.util.Random;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.io.PrintWriter;
+import java.io.FileOutputStream;
+import java.io.File;
 import java.io.EOFException;
 
 
@@ -41,6 +44,7 @@ public class Node {
   // resolves to the parent of the node for snapshot messages
   private int forwarder = -1;
 
+  private static String configPath = "";
 
   public Node(
     final int id,
@@ -57,7 +61,8 @@ public class Node {
     // find out which node this instance is labelled
     final int id = Integer.parseInt(args[1]);
     // read the configuration
-    Node.config = Config.fromFile(args[0]);
+    Node.configPath = args[0];
+    Node.config = Config.fromFile(new File(configPath));
     // pull the current node's config based on id label
     final Node node = Node.config.nodeConfigs[id];
     // run the node with knowledge from the configuration file
@@ -311,12 +316,37 @@ public class Node {
   }
 
   private void outputSnapshot() {
-    log("snapshot!");
+    log("snapshot taken!");
+    if (!isSnapshotConsistent()) {
+      err("snapshot inconsistent!");
+    } else {
+      log("consistent snapshot!");
+    }
+
+    writeSnapshots();
     resetSnapshotProtocol();
     runSnapshotTimer();
   }
 
-  private boolean isSnapshotValid() {
+  /**
+   * Return where the Global State snapshot is a consistent snapshot
+   */
+  private boolean isSnapshotConsistent() {
+    for (final LocalState e : globalState.getLocalStates()) {
+      for (final LocalState f : globalState.getLocalStates()) {
+        // For every ordered pair of states we want to verify that:
+        //                ¬(e -> f) ∧ ¬(f -> e)
+        // We can short circuit the statement if we see any
+        // pair which contains a happens-before relation.
+        // 
+        // e -> f === (e != f) ∧ (V(e)[P_i] < V(f)[P_i])
+        if (e.getID() != f.getID()) {
+          if (e.getApplicationClock()[e.getID()] <= f.getApplicationClock()[e.getID()]) {
+            return false;
+          }
+        }
+      }
+    }
     return true;
   }
 
@@ -340,6 +370,28 @@ public class Node {
       final ObjectOutputStream ostream = outputStreams.get(targetNode);
       ostream.writeObject(message);
       ostream.flush();
+    } catch (Exception e) {
+      e.printStackTrace();
+    }
+  }
+
+  private void writeSnapshots() {
+    try {
+      final File configFile = new File(Node.configPath);
+      final String configNameWithoutExt = configFile.getName().substring(0, configFile.getName().length() - ".txt".length());
+      final String configDirectory = configFile.getAbsoluteFile().getParent();
+
+      for (final LocalState snapshotState : globalState.getLocalStates()) {
+        final File outputFile = new File(configDirectory + "/" + configNameWithoutExt + "-" + snapshotState.getID() + ".out");
+        final PrintWriter outputWriter = new PrintWriter(new FileOutputStream(outputFile, true));
+
+        for (int clockValue : snapshotState.getApplicationClock()) {
+          outputWriter.append(clockValue + " ");
+        }
+        outputWriter.append("\n");
+
+        outputWriter.close();
+      }
     } catch (Exception e) {
       e.printStackTrace();
     }

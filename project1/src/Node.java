@@ -289,9 +289,9 @@ public class Node {
    * Process transition from Blue to Red Chandy-Lamport state
    */
   private synchronized void changeMode() {
-    // switch the markerMode for Blue to Red
+    // switch the markerMode from Blue to Red
     markerMode = Color.Red;
-    // increment clock of current process
+    // increment clock of in order to maintain clock lead over receivers
     vectorClock[id]++;
     // record the node's local state
     localState = new LocalState(id, vectorClock, state);

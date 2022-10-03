@@ -11,11 +11,11 @@ start: classes
 stop:
 	./cleanup.sh
 
-classes:
+classes: $(OUT)
 	$(JC) $(JFLAGS) $(SRC)/* -d $(OUT)
 
 clean:
 	rm -rf $(OUT)
 
 $(OUT):
-	@mkdir $@
+	@mkdir -p $@

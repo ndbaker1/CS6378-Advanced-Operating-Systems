@@ -1,5 +1,6 @@
 import java.io.Serializable;
 
+
 public class LocalState implements Serializable {
     private final int[] applicationClock;
     private final Node.State state;

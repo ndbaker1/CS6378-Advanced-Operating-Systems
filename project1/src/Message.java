@@ -14,7 +14,7 @@ public abstract class Message implements Serializable {
   }
 
   static class Application extends Message {
-    private int[] vectorClock;
+    private final int[] vectorClock;
     
     public Application(final int source, final int[] vectorClock) {
       super(source);
@@ -33,8 +33,8 @@ public abstract class Message implements Serializable {
   }
 
  static class Snapshot extends Message {
-    private LocalState localState;
-    private List<ChannelState> channelStates;
+    private final LocalState localState;
+    private final List<ChannelState> channelStates;
 
     public Snapshot(final int source, final LocalState localState, final List<ChannelState> channelStates) {
       super(source);

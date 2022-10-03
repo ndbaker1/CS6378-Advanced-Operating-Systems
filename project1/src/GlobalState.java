@@ -5,8 +5,8 @@ import java.util.ArrayList;
 
 
 public class GlobalState {
-    private List<LocalState> localStates = new ArrayList<LocalState>();
-    private List<ChannelState> channelStates = new ArrayList<ChannelState>();
+    private final List<LocalState> localStates = new ArrayList<LocalState>();
+    private final List<ChannelState> channelStates = new ArrayList<ChannelState>();
 
     public GlobalState() { }
 

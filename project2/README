@@ -1,0 +1,10 @@
+# CS 6378 Project 2
+Members:
+    - Nicholas Baker ndb180002
+    - Jaden Dick
+
+## Compile
+Run `make` in the current directory to build classes into `build`
+
+## Run
+Run `make start` to start the program and `make stop` to ensure every processes is killed

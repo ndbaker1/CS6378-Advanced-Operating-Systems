@@ -1,13 +1,14 @@
 import java.net.*;
 import java.util.*;
-import java.io.*;
 
+import java.io.*;
 
 public class MutualExclusionService {
   final private Map<Integer, Socket> sockets = new HashMap<>();
   final private Map<Integer, ObjectOutputStream> outputStreams = new HashMap<>();
+  final private Map<Integer, Integer> timestamps = new HashMap<>(); // Latest timestamp received from each process
 
-  final PriorityQueue requestQueue = new PriorityQueue();
+  final PriorityQueue<Message.Request> requestQueue = new PriorityQueue<Message.Request>();
 
   final int nodeId;
   final Config config;
@@ -25,8 +26,11 @@ public class MutualExclusionService {
     log("sleeping for [3] seconds to allow peer server sockets to setup...");
     Thread.sleep(3000);
 
-    // create a socket connection to each node in the neighbor set
+    // create a socket connection to each node
     for (int node = 0; node < config.nodes; node++) {
+      if(node == nodeId) // Don't connect to self
+        continue;
+        
       final Socket socket = new Socket(
         config.nodeConfigs[node].hostName,
         config.nodeConfigs[node].listenPort
@@ -36,6 +40,7 @@ public class MutualExclusionService {
 
       sockets.put(node, socket);
       outputStreams.put(node, new ObjectOutputStream(socket.getOutputStream()));
+      timestamps.put(node, 0);
     }
     
     log("sleeping for [3] seconds to allow peer client sockets to setup...");
@@ -43,7 +48,7 @@ public class MutualExclusionService {
   }
 
   // Scalar lamport clock
-  private int lamportClock = 0;
+  private Integer lamportClock = 0;
 
   /**
    * Critial Section Enter
@@ -52,7 +57,18 @@ public class MutualExclusionService {
    * entrance into the critical section
    */
   public void csEnter() {
+    Message requestMessage;
+    synchronized(lamportClock) {
+      requestMessage = new Message.Request(nodeId, lamportClock);
+    }
 
+    // Send out request messages to all outgoing channels
+    for (int streamIndex : outputStreams.keySet()) {
+      sendMessage(streamIndex, requestMessage);
+    }
+
+    // wait for reply from all or for timestamp to be lower than all other received times
+    // wait for request to be at front of queue
   }
 
   /**
@@ -62,7 +78,15 @@ public class MutualExclusionService {
    * process has completed executing critical section
    */
   public void csLeave() {
+    Message releaseMessage;
+    synchronized(lamportClock) {
+      releaseMessage = new Message.Release(nodeId, lamportClock);
+    }
 
+    // Send out release messages to all outgoing channels
+    for (int streamIndex : outputStreams.keySet()) {
+      sendMessage(streamIndex, releaseMessage);
+    }
   }
 
   private void setupListener() {
@@ -102,15 +126,62 @@ public class MutualExclusionService {
   }
 
   private void handleRequest(final Message.Request requestMessage) {
-    //
+    synchronized(requestQueue) {
+      requestQueue.add(requestMessage);
+    }
+
+    // Update scalar clock and send reply
+    synchronized(lamportClock) {
+      lamportClock = Integer.max(lamportClock, requestMessage.getTime()) + 1; 
+      sendMessage(requestMessage.getSource(), new Message.Reply(nodeId, lamportClock));
+    }
+    
+    // log("start queue");
+    // for (Message.Request request : requestQueue) {
+    //   log(request.getSource()+" "+request.getTime());
+    // }
+    // log("front of queue "+requestQueue.peek().getSource());
   }
 
   private void handleReply(final Message.Reply replyMessage) {
-    //
+    int source = replyMessage.getSource();
+    int time = replyMessage.getTime();
+
+    // Update scalar clock
+    synchronized(lamportClock) {
+      lamportClock = Integer.max(lamportClock, time) + 1; 
+    }
+
+    // Update the timestamp of a source. Don't need to synchronize since each source is only accessed by a single thread
+    timestamps.put(source, time);
+    
   }
 
   private void handleRelease(final Message.Release releaseMessage) {
-    //
+    // Update scalar clock
+    synchronized(lamportClock) {
+      lamportClock = Integer.max(lamportClock, releaseMessage.getTime()) + 1; 
+    }
+
+    // Remove source's request from the queue
+    requestQueue.removeIf((r) -> r.getSource() == releaseMessage.getSource());
+  }
+  
+  /**
+   * Send a message to a target node with a provided Message.
+   * 
+   * Note:
+   *  important synchronized resource, only one thread
+   *  should be using the output stream at once
+   */
+  private synchronized void sendMessage(final int targetNode, final Message message) {
+    try {
+      final ObjectOutputStream ostream = outputStreams.get(targetNode);
+      ostream.writeObject(message);
+      ostream.flush();
+    } catch (Exception e) {
+      e.printStackTrace();
+    }
   }
 
   private void err(final String message) {

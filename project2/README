@@ -1,7 +1,7 @@
 # CS 6378 Project 2
 Members:
     - Nicholas Baker ndb180002
-    - Jaden Dick
+    - Jaden Dick     jrd180002
 
 ## Compile
 Run `make` in the current directory to build classes into `build`

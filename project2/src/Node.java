@@ -20,6 +20,7 @@ public class Node {
 
   private final int id;
   private final Config config;
+  private final Random random;
 
   public Node(
     final int id,
@@ -29,6 +30,7 @@ public class Node {
     this.id = id;
     this.config = config;
     this.meService = meService;
+    random = new Random();
   }
 
   public static void main(String[] args) throws Exception {
@@ -53,7 +55,7 @@ public class Node {
   }
 
   private int randomExponentialFromMean(final int mean) {
-    return mean; // make sample from an exponential distribution with mean of the input value
+    return (int)(-Math.log(1-random.nextDouble()) * mean); // make sample from an exponential distribution with mean of the input value using inverse transform sampling
   }
 
   private void err(final String message) {

@@ -2,7 +2,8 @@
 
 
 # Change this to your netid
-netid=ndb180002
+#netid=ndb180002
+netid=jrd180002
 
 # Root directory of your project
 PROJDIR=$(pwd)

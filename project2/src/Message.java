@@ -26,16 +26,16 @@ public abstract class Message implements Serializable {
     // Comparator for priority queue ordering
     @Override
     public int compareTo(Message.Request anotherRequest) {
-      int thisTime = this.getTime();
-      int anotherTime = anotherRequest.getTime();
+      final int thisTime = this.getTime();
+      final int anotherTime = anotherRequest.getTime();
       if(thisTime < anotherTime)
         return -1;
       else if(thisTime > anotherTime)
         return 1;
         
       // If equal timestamp, order by node ID
-      int thisSource = this.getSource();
-      int anotherSource = anotherRequest.getSource();
+      final int thisSource = this.getSource();
+      final int anotherSource = anotherRequest.getSource();
       if(thisSource < anotherSource)
         return -1;
       else if(thisSource > anotherSource)
@@ -46,8 +46,15 @@ public abstract class Message implements Serializable {
   }
 
   static class Release extends Message {
-    public Release(final int source, final int time) {
+    private boolean finished;
+
+    public Release(final int source, final int time, final boolean finished) {
       super(source, time);
+      this.finished = finished;
+    }
+
+    public boolean getFinished() {
+      return finished;
     }
   }
 

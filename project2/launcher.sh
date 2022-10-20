@@ -32,8 +32,8 @@ cat $CONFIGLOCAL | sed -e "s/#.*//" | sed -e "/^\s*$/d" |
     	p=$( echo $line | awk '{ print $1 }' )
       host=$( echo $line | awk '{ print $2 }' )
 
-      echo -e "ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no $netid@$host java -cp $BINDIR $PROG $p "$conf_arg" &"
-      ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no $netid@$host java -cp $BINDIR $PROG $p "$conf_arg" &
+      echo -e "ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no $netid@$host java -cp $BINDIR $PROG $p $PROJDIR "$conf_arg" &"
+      ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no $netid@$host java -cp $BINDIR $PROG $p $PROJDIR "$conf_arg" &
 
       n=$(( n + 1 ))
     done

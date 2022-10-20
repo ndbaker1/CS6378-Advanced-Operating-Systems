@@ -3,6 +3,7 @@ import java.io.File;
 
 
 public class Config {
+  public final String project_path;
   public final int nodes;
   public final int interRequestDelay;
   public final int csExecutionTime;
@@ -10,12 +11,14 @@ public class Config {
   public final NodeConfig[] nodeConfigs;
 
   public Config(
+    final String project_path,
     final int nodes,
     final int interRequestDelay,
     final int csExecutionTime,
     final int numRequestsToGenerate,
     final NodeConfig[] nodeConfigs
   ) {
+    this.project_path = project_path;
     this.nodes = nodes;
     this.interRequestDelay = interRequestDelay;
     this.csExecutionTime = csExecutionTime;
@@ -52,7 +55,7 @@ public class Config {
     return configString;
   }
 
-  public static Config fromString(final String configString) throws Exception {
+  public static Config fromString(final String configString, final String project_path) throws Exception {
     final String[] args = configString.split(":");
 
     final int nodes = Integer.parseInt(args[0]);
@@ -71,6 +74,7 @@ public class Config {
     }
 
     return new Config(
+      project_path,
       nodes,
       interRequestDelay,
       csExecutionTime,
@@ -110,6 +114,7 @@ public class Config {
     configReader.close();
 
     return new Config(
+      "",
       nodes,
       interRequestDelay,
       csExecutionTime,

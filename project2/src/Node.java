@@ -1,19 +1,4 @@
-import java.net.Socket;
-import java.net.ServerSocket;
-import java.util.List;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.Set;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Random;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
-import java.io.PrintWriter;
-import java.io.FileOutputStream;
-import java.io.File;
-import java.io.EOFException;
-
 
 public class Node {
   private final MutualExclusionService meService;
@@ -36,21 +21,22 @@ public class Node {
   public static void main(String[] args) throws Exception {
     // find out which node this instance is labelled
     final int id = Integer.parseInt(args[0]);
-    final Config config = Config.fromString(args[1]);
+    final Config config = Config.fromString(args[2], args[1]);
+    
     // start new node
     new Node(id, config, new MutualExclusionService(id, config)).run();
   }
 
   private void run() throws Exception {
     for (int i = 0; i < config.numRequestsToGenerate; i++) {
-      log("sleeping until enter request..");
+      log("sleeping until enter request.."+i);
       Thread.sleep(randomExponentialFromMean(config.interRequestDelay));
-      log("requesting entrance to cs..");
+      log("requesting entrance to cs.."+i);
       meService.csEnter();
-      log("running cs..");
+      log("running cs.."+i);
       Thread.sleep(randomExponentialFromMean(config.csExecutionTime));
-      log("exiting cs..");
-      meService.csLeave();
+      log("exiting cs.."+i);
+      meService.csLeave(i+1 == config.numRequestsToGenerate); // Tell ME if you are finished when leaving CS
     }
   }
 

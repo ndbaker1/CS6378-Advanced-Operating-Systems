@@ -29,19 +29,19 @@ public class Node {
 
   private void run() throws Exception {
     for (int i = 0; i < config.numRequestsToGenerate; i++) {
-      log("sleeping until enter request.."+i);
+      log("sleeping until enter request.." + i);
       Thread.sleep(randomExponentialFromMean(config.interRequestDelay));
-      log("requesting entrance to cs.."+i);
+      log("requesting entrance to cs.." + i);
       meService.csEnter();
-      log("running cs.."+i);
+      log("running cs.." + i);
       Thread.sleep(randomExponentialFromMean(config.csExecutionTime));
-      log("exiting cs.."+i);
-      meService.csLeave(i+1 == config.numRequestsToGenerate); // Tell ME if you are finished when leaving CS
+      log("exiting cs.." + i);
+      meService.csLeave(i + 1 == config.numRequestsToGenerate); // Tell ME if you are finished when leaving CS
     }
   }
 
   private int randomExponentialFromMean(final int mean) {
-    return (int)(-Math.log(1-random.nextDouble()) * mean); // make sample from an exponential distribution with mean of the input value using inverse transform sampling
+    return (int)(-Math.log(1 - random.nextDouble()) * mean); // make sample from an exponential distribution with mean of the input value using inverse transform sampling
   }
 
   private void err(final String message) {

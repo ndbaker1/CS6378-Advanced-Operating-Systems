@@ -7,7 +7,7 @@ public class MutualExclusionService {
   private final Map<Integer, Socket> sockets = new HashMap<>();
   private final Map<Integer, ObjectOutputStream> outputStreams = new HashMap<>();
   private final Map<Integer, Integer> timestamps = new HashMap<>(); // Latest timestamp received from each process
-  private final Map<Integer, Boolean> finished_map = new HashMap<>(); // Track if each process has finished 
+  private final Map<Integer, Boolean> finishedMap = new HashMap<>(); // Track if each process has finished 
 
   private final Semaphore csLock = new Semaphore(0, true);
 
@@ -15,7 +15,7 @@ public class MutualExclusionService {
 
   private final int nodeId;
   private final Config config;
-  private final FileWriter output_writer;
+  private final FileWriter outputWriter;
   
   // Scalar lamport clock
   private Integer lamportClock = 0;
@@ -27,17 +27,28 @@ public class MutualExclusionService {
     this.nodeId = nodeId;
     this.config = config;
 
-    // Create logs directory in the project directory and write CS activity
+
+    // Create logs directory in the project directory to write CS activity
     new File(config.project_path, "logs").mkdir();
-    output_writer = new FileWriter(config.project_path + "/logs/output-" + nodeId + ".out");
+    // Delete existing log files
+    for (final File file : new File(config.project_path, "logs").listFiles()) {
+      if (!file.isDirectory()) {
+        try {
+          file.delete();
+        } catch (Exception e) {
+          e.printStackTrace();
+        }
+      }
+    }
+    outputWriter = new FileWriter(config.project_path + "/logs/output-" + nodeId + ".out");
     
     // spawn a thread to accept connections to this node
     new Thread(() -> setupListener()).start(); 
 
-    log("sleeping for [3] seconds to allow peer server sockets to setup...");
-    Thread.sleep(3000);
+    log("sleeping for [5] seconds to allow peer server sockets to setup...");
+    Thread.sleep(5000);
 
-    finished_map.put(nodeId, false); // Need entry to track if self has finished
+    finishedMap.put(nodeId, false); // Need entry to track if self has finished
     
     // create a socket connection to each node
     for (int node = 0; node < config.nodes; node++) {
@@ -55,11 +66,11 @@ public class MutualExclusionService {
       outputStreams.put(node, new ObjectOutputStream(socket.getOutputStream()));
 
       timestamps.put(node, 0);
-      finished_map.put(node, false);
+      finishedMap.put(node, false);
     }
     
-    log("sleeping for [3] seconds to allow peer client sockets to setup...");
-    Thread.sleep(3000);
+    log("sleeping for [5] seconds to allow peer client sockets to setup...");
+    Thread.sleep(5000);
   }
 
   /**
@@ -91,7 +102,7 @@ public class MutualExclusionService {
     }
 
     try {
-      output_writer.write(nodeId + " enter at " + lamportClock + "\n");
+      outputWriter.write(nodeId + " enter at " + lamportClock + "\n");
     } catch (Exception e) {
       e.printStackTrace();
     }
@@ -112,7 +123,7 @@ public class MutualExclusionService {
     }
     
     try {
-      output_writer.write(nodeId + " leave at " + lamportClock + "\n");
+      outputWriter.write(nodeId + " leave at " + lamportClock + "\n");
     } catch (Exception e) {
       e.printStackTrace();
 		}
@@ -257,18 +268,19 @@ public class MutualExclusionService {
 
   // Update node_id to be finished. If all nodes are finished, terminate
   private void check_finished(int node_id) {
-    finished_map.put(node_id, true);
-    if(!finished_map.containsValue(false)) {
+    finishedMap.put(node_id, true);
+    if(!finishedMap.containsValue(false)) {
       log("terminating");
       try {
-        output_writer.close();
+        outputWriter.close();
       } catch (Exception e) {
         e.printStackTrace();
       }
 
-      // Cleanup this if ugly
+      // Node 0 runs mutual exclusion check
       if (nodeId == 0) {
         log("running mutual exclusion check..");
+        // Combine all log files into single list
         final List<String[]> entryList = new ArrayList<String[]>();
         for (final File file : new File(config.project_path, "logs").listFiles()) {
           if (!file.isDirectory()) {
@@ -286,13 +298,15 @@ public class MutualExclusionService {
         // sort the entries by their timestamp
         entryList.sort((String[] s1, String[] s2) -> Integer.parseInt(s1[3]) < Integer.parseInt(s2[3]) ? -1 : 1);
 
-        // ensure that an enter is proceeded by a leave, and increasing timestamps are from the same node
+        // Ensure that enter/leave entries alternate, timestamps are strictly increasing, 
+        // and a leave follows an enter from the same node
         String[] last = null;
         for (String[] cur : entryList) {
           if (
             last != null &&
-            last[3].equals(cur[3]) ||
-            cur[3].equals("leave") && !last[0].equals(cur[0])
+              ( last[1].equals(cur[1]) ||
+              Integer.parseInt(cur[3]) <= Integer.parseInt(last[3]) ||
+              cur[1].equals("leave") && !last[0].equals(cur[0]) )
           ) {
             err("failed mutual exclusion for:");
             err("\t" + String.join(" ", cur));

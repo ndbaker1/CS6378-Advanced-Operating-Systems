@@ -1,20 +1,24 @@
-import java.net.*;
+import java.util.concurrent.Semaphore;
 import java.util.*;
-
+import java.net.*;
 import java.io.*;
 
 public class MutualExclusionService {
-  final private Map<Integer, Socket> sockets = new HashMap<>();
-  final private Map<Integer, ObjectOutputStream> outputStreams = new HashMap<>();
-  private Map<Integer, Integer> timestamps = new HashMap<>(); // Latest timestamp received from each process
-  private Map<Integer, Boolean> finished_map = new HashMap<>(); // Track if each process has finished 
+  private final Map<Integer, Socket> sockets = new HashMap<>();
+  private final Map<Integer, ObjectOutputStream> outputStreams = new HashMap<>();
+  private final Map<Integer, Integer> timestamps = new HashMap<>(); // Latest timestamp received from each process
+  private final Map<Integer, Boolean> finished_map = new HashMap<>(); // Track if each process has finished 
 
-  final PriorityQueue<Message.Request> requestQueue = new PriorityQueue<Message.Request>();
+  private final Semaphore csLock = new Semaphore(0, true);
 
-  final int nodeId;
-  final Config config;
-  private FileWriter output_writer;
+  private final PriorityQueue<Message.Request> requestQueue = new PriorityQueue<Message.Request>();
 
+  private final int nodeId;
+  private final Config config;
+  private final FileWriter output_writer;
+  
+  // Scalar lamport clock
+  private Integer lamportClock = 0;
 
   public MutualExclusionService(
     final int nodeId,
@@ -24,9 +28,8 @@ public class MutualExclusionService {
     this.config = config;
 
     // Create logs directory in the project directory and write CS activity
-    File log_directory = new File(config.project_path, "logs");
-    log_directory.mkdir();
-    output_writer = new FileWriter(config.project_path+"/logs/output-"+nodeId+".out");
+    new File(config.project_path, "logs").mkdir();
+    output_writer = new FileWriter(config.project_path + "/logs/output-" + nodeId + ".out");
     
     // spawn a thread to accept connections to this node
     new Thread(() -> setupListener()).start(); 
@@ -50,6 +53,7 @@ public class MutualExclusionService {
 
       sockets.put(node, socket);
       outputStreams.put(node, new ObjectOutputStream(socket.getOutputStream()));
+
       timestamps.put(node, 0);
       finished_map.put(node, false);
     }
@@ -57,9 +61,6 @@ public class MutualExclusionService {
     log("sleeping for [3] seconds to allow peer client sockets to setup...");
     Thread.sleep(3000);
   }
-
-  // Scalar lamport clock
-  private Integer lamportClock = 0;
 
   /**
    * Critial Section Enter
@@ -82,14 +83,18 @@ public class MutualExclusionService {
       sendMessage(streamIndex, requestMessage);
     }
 
-    // wait for reply from all or for timestamp to be lower than all other received times
-    // wait for request to be at front of queue
-
+    // block until permission given
     try {
-      output_writer.append(nodeId+" enter at "+lamportClock+"\n");
+      csLock.acquire();
     } catch (Exception e) {
       e.printStackTrace();
-		}
+    }
+
+    try {
+      output_writer.write(nodeId + " enter at " + lamportClock + "\n");
+    } catch (Exception e) {
+      e.printStackTrace();
+    }
   }
 
   /**
@@ -99,30 +104,27 @@ public class MutualExclusionService {
    * process has completed executing critical section
    */
   public void csLeave(boolean finished) {
-    try {
-      output_writer.append(nodeId+" leave at "+lamportClock+"\n");
-    } catch (Exception e) {
-      e.printStackTrace();
-		}
 
     Message releaseMessage;
     synchronized(lamportClock) {
       lamportClock += 1;
       releaseMessage = new Message.Release(nodeId, lamportClock, finished);
     }
-    // Remove own request from the queue
-    synchronized(requestQueue) {
-      requestQueue.removeIf((r) -> r.getSource() == nodeId);
-    }
     
+    try {
+      output_writer.write(nodeId + " leave at " + lamportClock + "\n");
+    } catch (Exception e) {
+      e.printStackTrace();
+		}
 
     // Send out release messages to all outgoing channels
     for (int streamIndex : outputStreams.keySet()) {
       sendMessage(streamIndex, releaseMessage);
     }
 
-    if(finished)
+    if (finished) {
       check_finished(nodeId);
+    }
   }
 
   private void setupListener() {
@@ -172,11 +174,7 @@ public class MutualExclusionService {
       sendMessage(requestMessage.getSource(), new Message.Reply(nodeId, lamportClock));
     }
     
-    // log("start queue");
-    // for (Message.Request request : requestQueue) {
-    //   log(request.getSource()+" "+request.getTime());
-    // }
-    // log("front of queue "+requestQueue.peek().getSource());
+    timestamps.put(requestMessage.getSource(), requestMessage.getTime());
   }
 
   private void handleReply(final Message.Reply replyMessage) {
@@ -190,7 +188,8 @@ public class MutualExclusionService {
 
     // Update the timestamp of a source. Don't need to synchronize since each source is only accessed by a single thread
     timestamps.put(source, time);
-    
+
+    testCriticalSection();
   }
 
   private void handleRelease(final Message.Release releaseMessage) {
@@ -204,8 +203,13 @@ public class MutualExclusionService {
       requestQueue.removeIf((r) -> r.getSource() == releaseMessage.getSource());
     }
 
-    if(releaseMessage.getFinished())
+    timestamps.put(releaseMessage.getSource(), releaseMessage.getTime());
+
+    if (releaseMessage.getFinished()) {
       check_finished(releaseMessage.getSource());
+    }
+
+    testCriticalSection();
   }
   
   /**
@@ -222,6 +226,24 @@ public class MutualExclusionService {
       ostream.flush();
     } catch (Exception e) {
       e.printStackTrace();
+    }
+  }
+
+  // wait for reply from all or for timestamp to be lower than all other received times
+  // wait for request to be at front of queue
+  private void testCriticalSection() {
+    synchronized(timestamps) {
+      synchronized(requestQueue) {
+        if ( // provide access to the critical section when request is at the front and all peering timestamps are lower
+          requestQueue.peek() != null &&
+          requestQueue.peek().getSource() == nodeId &&
+          timestamps.entrySet().stream().allMatch(t -> t.getValue() > requestQueue.peek().getTime())
+        ) {
+          // Remove own request from the queue
+          requestQueue.poll();
+          csLock.release();
+        }
+      }
     }
   }
 
@@ -243,6 +265,45 @@ public class MutualExclusionService {
       } catch (Exception e) {
         e.printStackTrace();
       }
+
+      // Cleanup this if ugly
+      if (nodeId == 0) {
+        log("running mutual exclusion check..");
+        final List<String[]> entryList = new ArrayList<String[]>();
+        for (final File file : new File(config.project_path, "logs").listFiles()) {
+          if (!file.isDirectory()) {
+            try {
+              final Scanner fileScanner = new Scanner(file);
+              while (fileScanner.hasNextLine()) {
+                entryList.add(fileScanner.nextLine().split(" "));
+              }
+            } catch (Exception e) {
+              e.printStackTrace();
+            }
+          }
+        }
+        
+        // sort the entries by their timestamp
+        entryList.sort((String[] s1, String[] s2) -> Integer.parseInt(s1[3]) < Integer.parseInt(s2[3]) ? -1 : 1);
+
+        // ensure that an enter is proceeded by a leave, and increasing timestamps are from the same node
+        String[] last = null;
+        for (String[] cur : entryList) {
+          if (
+            last != null &&
+            last[3].equals(cur[3]) ||
+            cur[3].equals("leave") && !last[0].equals(cur[0])
+          ) {
+            err("failed mutual exclusion for:");
+            err("\t" + String.join(" ", cur));
+            err("\t" + String.join(" ", last));
+            System.exit(0);
+          }
+          last = cur;
+        }
+        log("passed mutual exclusion check!");
+      }
+
       System.exit(0);
     }
   }

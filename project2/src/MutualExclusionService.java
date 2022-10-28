@@ -20,6 +20,9 @@ public class MutualExclusionService {
   // Scalar lamport clock
   private Integer lamportClock = 0;
 
+  // Metric variables
+  private int messagesSent = 0;
+
   public MutualExclusionService(
     final int nodeId,
     final Config config
@@ -235,6 +238,8 @@ public class MutualExclusionService {
       final ObjectOutputStream ostream = outputStreams.get(targetNode);
       ostream.writeObject(message);
       ostream.flush();
+      // increment message counter
+      messagesSent += 1;
     } catch (Exception e) {
       e.printStackTrace();
     }
@@ -276,6 +281,9 @@ public class MutualExclusionService {
       } catch (Exception e) {
         e.printStackTrace();
       }
+
+      // record the number of messages sent during the execution
+      MetricLogger.record(nodeId, config, "messageComplexity", (double) messagesSent / config.numRequestsToGenerate);
 
       // Node 0 runs mutual exclusion check
       if (nodeId == 0) {

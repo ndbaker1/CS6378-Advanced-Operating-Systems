@@ -33,13 +33,20 @@ public class MutualExclusionService {
 
     // Create logs directory in the project directory to write CS activity
     new File(config.project_path, "logs").mkdir();
-    // Delete existing log files
-    for (final File file : new File(config.project_path, "logs").listFiles()) {
-      if (!file.isDirectory()) {
-        try {
-          file.delete();
-        } catch (Exception e) {
-          e.printStackTrace();
+    // Node 0 deletes log files that won't be overwritten
+    if(nodeId == 0)
+    {
+      for (final File file : new File(config.project_path, "logs").listFiles()) {
+        if (!file.isDirectory()) {
+          try {
+            // Only delete files that won't get overwritten by a node in this run
+            String name = file.getName();
+            if(config.nodes <= Integer.parseInt(name.substring(7, name.indexOf('.')))) {
+              file.delete();
+            }
+          } catch (Exception e) {
+            e.printStackTrace();
+          }
         }
       }
     }

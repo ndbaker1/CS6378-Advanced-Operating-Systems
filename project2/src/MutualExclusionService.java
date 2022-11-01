@@ -260,7 +260,7 @@ public class MutualExclusionService {
         if ( // provide access to the critical section when request is at the front and all peering timestamps are lower
           requestQueue.peek() != null &&
           requestQueue.peek().getSource() == nodeId &&
-          timestamps.entrySet().stream().allMatch(t -> t.getValue() > requestQueue.peek().getTime())
+          timestamps.entrySet().stream().allMatch(t -> t.getValue() >= requestQueue.peek().getTime())
         ) {
           // Remove own request from the queue
           requestQueue.poll();

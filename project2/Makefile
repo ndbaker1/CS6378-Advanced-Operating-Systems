@@ -11,6 +11,9 @@ start: classes
 stop:
 	./cleanup.sh
 
+eval:
+	python3 src/metrics.py
+
 classes: $(OUT)
 	$(JC) $(JFLAGS) $(SRC)/* -d $(OUT)
 

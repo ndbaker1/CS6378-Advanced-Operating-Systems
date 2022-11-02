@@ -54,7 +54,7 @@ public class Node {
       if (finished) {
         // save the average response time to a file
         MetricLogger.record(id, config, "responseTime", (double) responseTimeAccumulator / config.numRequestsToGenerate);
-        MetricLogger.record(id, config, "systemThroughput", (double) (System.currentTimeMillis() - systemStartTime) / config.numRequestsToGenerate);
+        MetricLogger.record(id, config, "systemThroughput", (double) (1000 * config.nodes * config.numRequestsToGenerate) / (System.currentTimeMillis() - systemStartTime));
       }
 
       meService.csLeave(finished); // Tell ME if you are finished when leaving CS

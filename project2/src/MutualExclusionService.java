@@ -33,13 +33,20 @@ public class MutualExclusionService {
 
     // Create logs directory in the project directory to write CS activity
     new File(config.project_path, "logs").mkdir();
-    // Delete existing log files
-    for (final File file : new File(config.project_path, "logs").listFiles()) {
-      if (!file.isDirectory()) {
-        try {
-          file.delete();
-        } catch (Exception e) {
-          e.printStackTrace();
+    // Node 0 deletes log files that won't be overwritten
+    if(nodeId == 0)
+    {
+      for (final File file : new File(config.project_path, "logs").listFiles()) {
+        if (!file.isDirectory()) {
+          try {
+            // Only delete files that won't get overwritten by a node in this run
+            String name = file.getName();
+            if(config.nodes <= Integer.parseInt(name.substring(7, name.indexOf('.')))) {
+              file.delete();
+            }
+          } catch (Exception e) {
+            e.printStackTrace();
+          }
         }
       }
     }
@@ -253,7 +260,7 @@ public class MutualExclusionService {
         if ( // provide access to the critical section when request is at the front and all peering timestamps are lower
           requestQueue.peek() != null &&
           requestQueue.peek().getSource() == nodeId &&
-          timestamps.entrySet().stream().allMatch(t -> t.getValue() > requestQueue.peek().getTime())
+          timestamps.entrySet().stream().allMatch(t -> t.getValue() >= requestQueue.peek().getTime())
         ) {
           // Remove own request from the queue
           requestQueue.poll();

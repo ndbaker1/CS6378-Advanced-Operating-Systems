@@ -23,6 +23,11 @@ public class MutualExclusionService {
   // Metric variables
   private int messagesSent = 0;
 
+  // Vector clock for correctness check
+  private int[] vector_clock; 
+  private int[] saved_vector_clock; // Save the current clock when entering CS
+  boolean failed = false; // Track if any nodes failed the check
+
   public MutualExclusionService(
     final int nodeId,
     final Config config
@@ -52,11 +57,13 @@ public class MutualExclusionService {
     }
     outputWriter = new FileWriter(config.project_path + "/logs/output-" + nodeId + ".out");
     
+    vector_clock = new int[config.nodes]; // Initialize vector clock to all 0
+
     // spawn a thread to accept connections to this node
     new Thread(() -> setupListener()).start(); 
 
-    log("sleeping for [5] seconds to allow peer server sockets to setup...");
-    Thread.sleep(5000);
+    log("sleeping for [7] seconds to allow peer server sockets to setup...");
+    Thread.sleep(7000);
 
     finishedMap.put(nodeId, false); // Need entry to track if self has finished
     
@@ -111,6 +118,8 @@ public class MutualExclusionService {
       e.printStackTrace();
     }
 
+    saved_vector_clock = Arrays.copyOf(vector_clock, vector_clock.length); // Copy the current vector clock
+
     try {
       outputWriter.write(nodeId + " enter at " + lamportClock + "\n");
     } catch (Exception e) {
@@ -129,7 +138,9 @@ public class MutualExclusionService {
     Message releaseMessage;
     synchronized(lamportClock) {
       lamportClock += 1;
-      releaseMessage = new Message.Release(nodeId, lamportClock, finished);
+      saved_vector_clock[nodeId] += 1;
+      vector_clock[nodeId] += 1;
+      releaseMessage = new Message.Release(nodeId, lamportClock, finished, saved_vector_clock);
     }
     
     try {
@@ -217,6 +228,20 @@ public class MutualExclusionService {
     // Update scalar clock
     synchronized(lamportClock) {
       lamportClock = Integer.max(lamportClock, releaseMessage.getTime()) + 1; 
+      int[] recv_clock = releaseMessage.getVectorClock();
+
+      // new_clock didn't know about a release from this node so it must've started before this node exitted CS
+      // log("v "+Arrays.toString(vector_clock));
+      // log("r "+Arrays.toString(recv_clock));
+      if(vector_clock[nodeId] != recv_clock[nodeId]) {
+        err("Multiple nodes in CS");
+        failed = true;
+      }
+
+      // Update vector clock to max of values received
+      for(int i = 0; i < config.nodes; i++) {
+        vector_clock[i] = Integer.max(vector_clock[i], recv_clock[i]);
+      }
     }
 
     // Remove source's request from the queue

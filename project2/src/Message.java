@@ -47,14 +47,20 @@ public abstract class Message implements Serializable {
 
   static class Release extends Message {
     private boolean finished;
+    private int[] vector_clock;
 
-    public Release(final int source, final int time, final boolean finished) {
+    public Release(final int source, final int time, final boolean finished, final int[] vector_clock) {
       super(source, time);
       this.finished = finished;
+      this.vector_clock = vector_clock;
     }
 
     public boolean getFinished() {
       return finished;
+    }
+
+    public int[] getVectorClock() {
+      return vector_clock;
     }
   }
 

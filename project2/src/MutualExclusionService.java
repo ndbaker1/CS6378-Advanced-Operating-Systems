@@ -86,8 +86,8 @@ public class MutualExclusionService {
       finishedMap.put(node, false);
     }
     
-    log("sleeping for [5] seconds to allow peer client sockets to setup...");
-    Thread.sleep(5000);
+    log("sleeping for [7] seconds to allow peer client sockets to setup...");
+    Thread.sleep(7000);
   }
 
   /**
@@ -231,8 +231,6 @@ public class MutualExclusionService {
       int[] recv_clock = releaseMessage.getVectorClock();
 
       // new_clock didn't know about a release from this node so it must've started before this node exitted CS
-      // log("v "+Arrays.toString(vector_clock));
-      // log("r "+Arrays.toString(recv_clock));
       if(vector_clock[nodeId] != recv_clock[nodeId]) {
         err("Multiple nodes in CS");
         failed = true;

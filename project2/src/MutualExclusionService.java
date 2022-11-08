@@ -141,14 +141,14 @@ public class MutualExclusionService {
       saved_vector_clock[nodeId] += 1;
       vector_clock[nodeId] += 1;
       releaseMessage = new Message.Release(nodeId, lamportClock, finished, saved_vector_clock);
+      
+      try {
+        outputWriter.write(nodeId + " leave at " + lamportClock + "\n");
+      } catch (Exception e) {
+        e.printStackTrace();
+      }
     }
-    
-    try {
-      outputWriter.write(nodeId + " leave at " + lamportClock + "\n");
-    } catch (Exception e) {
-      e.printStackTrace();
-		}
-
+      
     // Send out release messages to all outgoing channels
     for (int streamIndex : outputStreams.keySet()) {
       sendMessage(streamIndex, releaseMessage);

@@ -148,6 +148,15 @@ public class MutualExclusionService {
         e.printStackTrace();
       }
     }
+
+    // Close writer before sending release message. Guarantee node0 won't read file before it gets closed
+    if (finished) {
+      try {
+        outputWriter.close();
+      } catch (Exception e) {
+        e.printStackTrace();
+      }
+    }
       
     // Send out release messages to all outgoing channels
     for (int streamIndex : outputStreams.keySet()) {

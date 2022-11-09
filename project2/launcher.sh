@@ -23,7 +23,7 @@ echo "$conf_arg"
 
 if [ -n "$1" ]; then
   echo "java -cp $BINDIR $PROG $1 $PROJDIR "$conf_arg" &"
-  java -cp $BINDIR $PROG $1 $PROJDIR "$conf_arg" &
+  java -cp $BINDIR $PROG $1 $PROJDIR "$conf_arg"
   exit
 fi
 
